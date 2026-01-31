@@ -5,6 +5,20 @@ from datetime import datetime
 from langchain_core.tools import Tool
 from langchain.agents import create_agent
 
+def calculator(expression: str) -> str:
+    """
+    Evaluates a mathematical expression provided as a string.
+    For demo purposes, uses Python's eval() with basic error handling.
+    WARNING: Do not use eval() with untrusted input in production.
+    """
+    try:
+        # Only allow certain built-in functions and operators for safety
+        allowed_names = {"__builtins__": None}
+        result = eval(expression, allowed_names, {})
+        return str(result)
+    except Exception as e:
+        return f"Error evaluating expression: {e}"
+
 def main() -> None:
     print("🤖 Python LangChain Agent Starting...")
 

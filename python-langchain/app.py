@@ -36,8 +36,22 @@ def main() -> None:
         temperature=0,
         base_url="https://models.github.ai/inference",
         api_key=token,
-)
+    )
     print("🧠 Language model initialized successfully!")
+
+    # Create tools list with Calculator tool
+    tools = [
+        Tool(
+            name="Calculator",
+            func=calculator,
+            description=(
+                "Use this tool to evaluate mathematical expressions, "
+                "such as arithmetic operations (addition, subtraction, multiplication, division), "
+                "and to solve math problems provided as strings. "
+                "Use it whenever a calculation or numeric result is required."
+            ),
+        )
+    ]
 
     query = "What is 25 * 4 + 10?"
     print(f"📝 Query: {query}")

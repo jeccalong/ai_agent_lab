@@ -1,5 +1,6 @@
 import os
 import inspect
+from datetime import datetime
 
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
@@ -20,6 +21,15 @@ def calculator(expression: str) -> str:
         return str(result)
     except Exception as e:
         return f"Error evaluating expression: {e}"
+
+
+def get_current_time(_: str) -> str:
+    """
+    Returns the current date and time as a formatted string.
+    Uses datetime.now().strftime("%Y-%m-%d %H:%M:%S").
+    The input parameter is required by the Tool interface but is not used.
+    """
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 def build_agent_executor(llm, tools):

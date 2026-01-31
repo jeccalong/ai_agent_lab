@@ -1,4 +1,6 @@
 from dotenv import load_dotenv
+from langchain_openai import ChatOpenAI
+
 import os
 
 
@@ -15,6 +17,14 @@ def main() -> None:
         return
 
     print("✅ GITHUB_TOKEN loaded successfully!")
+
+    llm = ChatOpenAI(
+        model="openai/gpt-4o",
+        temperature=0,
+        base_url="https://models.github.ai/inference",
+        api_key=token,
+)
+    print("🧠 Language model initialized successfully!")
 
 
 if __name__ == "__main__":

@@ -26,6 +26,13 @@ def main() -> None:
 )
     print("🧠 Language model initialized successfully!")
 
+    query = "What is 25 * 4 + 10?"
+    print(f"📝 Query: {query}")
+
+    response = llm.invoke(query)
+    print("🤖 Response:")
+    print(response.content)
+
 
 if __name__ == "__main__":
     main()

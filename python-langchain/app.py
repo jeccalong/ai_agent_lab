@@ -93,9 +93,6 @@ def main() -> None:
 
     if not token:
         print("❌ GITHUB_TOKEN not found.")
-        print("👉 Add it to your .env file (repo root) like:")
-        print("   GITHUB_TOKEN=your_token_here")
-        print("🔒 Never commit .env to GitHub.")
         return
 
     print("✅ GITHUB_TOKEN loaded successfully!")
@@ -110,16 +107,16 @@ def main() -> None:
 
     # Prompt 10: Create tools list with Calculator tool
     tools = [
-        Tool(
-            name="Calculator",
-            func=calculator,
-            description=(
-                "Use this tool to evaluate mathematical expressions, "
-                "such as arithmetic operations (addition, subtraction, multiplication, division), "
-                "and to solve math problems provided as strings. "
-                "Use it whenever a calculation or numeric result is required."
-            ),
-        )
+        # Tool(
+        #     name="Calculator",
+        #     func=calculator,
+        #     description=(
+        #         "Use this tool to evaluate mathematical expressions, "
+        #         "such as arithmetic operations (addition, subtraction, multiplication, division), "
+        #         "and to solve math problems provided as strings. "
+        #         "Use it whenever a calculation or numeric result is required."
+        #     ),
+        # )
     ]
     print("🛠️ Tools initialized successfully!")
 
@@ -127,10 +124,9 @@ def main() -> None:
     try:
         agent_executor = build_agent_executor(llm, tools)
 
-        test_query = "What is 25 * 4 + 10?"
+        test_query = "What time is it right now?"  # <-- Updated query
         print(f"📝 Agent Test Query: {test_query}")
 
-        # Try common input payload shapes (LangChain-version dependent)
         payloads = [
             {"input": test_query},
             {"query": test_query},
@@ -153,13 +149,11 @@ def main() -> None:
 
         print("🤖 Agent Output:")
 
-        # Your agent returns a dict with a "messages" list. The final answer is the last AI message.
         if isinstance(result, dict) and "messages" in result and result["messages"]:
             last_msg = result["messages"][-1]
             content = getattr(last_msg, "content", None)
             print(content if content else last_msg)
         else:
-            # Fallback for other result shapes
             if isinstance(result, dict):
                 print(result.get("output") or result.get("result") or result)
             else:

@@ -125,24 +125,29 @@ def main() -> None:
 
     # Prompt 10: Create tools list with Calculator tool
     tools = [
-        # Tool(
-        #     name="Calculator",
-        #     func=calculator,
-        #     description=(
-        #         "Use this tool to evaluate mathematical expressions, "
-        #         "such as arithmetic operations (addition, subtraction, multiplication, division), "
-        #         "and to solve math problems provided as strings. "
-        #         "Use it whenever a calculation or numeric result is required."
-        #     ),
-        # ),
-        # Tool(
-        #     name="get_current_time",
-        #     func=get_current_time,
-        #     description=(
-        #         "Use this tool to get the current date and time. "
-        #         "Use it whenever a user asks for the current time or date."
-        #     ),
-        # ),
+        Tool(
+            name="Calculator",
+            func=calculator,
+            description=(
+                "Use this tool to evaluate mathematical expressions, "
+                "such as arithmetic operations (addition, subtraction, multiplication, division), "
+                "and to solve math problems provided as strings. "
+                "Use it whenever a calculation or numeric result is required."
+            ),
+        ),
+        Tool(
+            name="get_current_time",
+            func=get_current_time,
+            description=(
+                "Use this tool to get the current date and time. "
+                "Use it whenever a user asks for the current time or date."
+            ),
+        ),
+        Tool(
+            name="reverse_string",
+            func=reverse_string,
+            description="Reverses a string. Input should be a single string.",
+        ),
     ]
     print("🛠️ Tools initialized successfully!")
 

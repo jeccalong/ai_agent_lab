@@ -32,6 +32,14 @@ def get_current_time(_: str) -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
+def reverse_string(s: str) -> str:
+    """
+    Reverses a string.
+    Takes a string input parameter and returns the reversed string using Python slice notation [::-1].
+    """
+    return s[::-1]
+
+
 def build_agent_executor(llm, tools):
     """
     Builds an agent executor using create_agent(), adapting to the installed

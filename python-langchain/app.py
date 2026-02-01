@@ -97,6 +97,36 @@ def weather_tool_city(city: str) -> str:
         return f"Error retrieving weather for {city}: {e}"
 
 
+def file_tool(action_and_content: str) -> str:
+    """
+    Reads from or writes to a text file using Python's built-in file operations.
+    Input should be in the format:
+      - "read:<filename>" to read a file
+      - "write:<filename>:<content>" to write content to a file
+    Returns the file content for reads, or a success message for writes.
+    Includes basic error handling.
+    """
+    try:
+        parts = action_and_content.split(":", 2)
+        if len(parts) < 2:
+            return "Invalid input format. Use 'read:<filename>' or 'write:<filename>:<content>'."
+        action, filename = parts[0].strip().lower(), parts[1].strip()
+        if action == "read":
+            with open(filename, "r", encoding="utf-8") as f:
+                return f.read()
+        elif action == "write":
+            if len(parts) < 3:
+                return "No content provided for write operation."
+            content = parts[2]
+            with open(filename, "w", encoding="utf-8") as f:
+                f.write(content)
+            return f"Successfully wrote to {filename}."
+        else:
+            return "Unknown action. Use 'read' or 'write'."
+    except Exception as e:
+        return f"FileTool error: {e}"
+
+
 def build_agent_executor(llm, tools):
     """
     Builds an agent executor using create_agent(), adapting to the installed
@@ -206,6 +236,11 @@ def main() -> None:
             name="weather_tool_city",
             func=weather_tool_city,
             description="Returns mock weather data for a given city.",
+        ),
+        Tool(
+            name="file_tool",
+            func=file_tool,
+            description="Reads from or writes to a text file.",
         ),
     ]
     print("🛠️ Tools initialized successfully!")

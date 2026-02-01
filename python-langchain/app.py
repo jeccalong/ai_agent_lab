@@ -155,40 +155,53 @@ def main() -> None:
     try:
         agent_executor = build_agent_executor(llm, tools)
 
-        test_query = "Reverse the string 'Hello World'"  # <-- Updated query
-        print(f"📝 Agent Test Query: {test_query}")
-
-        payloads = [
-            {"input": test_query},
-            {"query": test_query},
-            {"question": test_query},
-            {"messages": [{"role": "user", "content": test_query}]},
+        test_queries = [
+            "What time is it right now?",
+            "What is 25 * 4 + 10?",
+            "Reverse the string 'Hello World'",
         ]
 
-        result = None
-        last_error = None
+        print("\nRunning example queries:\n")
 
-        for payload in payloads:
-            try:
-                result = agent_executor.invoke(payload)
-                break
-            except Exception as e:
-                last_error = e
+        for query in test_queries:
+            print(f"📝 Query: {query}")
+            print("─" * 50)
 
-        if result is None:
-            raise last_error
+            # Try common input payload shapes (LangChain-version dependent)
+            payloads = [
+                {"input": query},
+                {"query": query},
+                {"question": query},
+                {"messages": [{"role": "user", "content": query}]},
+            ]
 
-        print("🤖 Agent Output:")
+            result = None
+            last_error = None
 
-        if isinstance(result, dict) and "messages" in result and result["messages"]:
-            last_msg = result["messages"][-1]
-            content = getattr(last_msg, "content", None)
-            print(content if content else last_msg)
-        else:
+            for payload in payloads:
+                try:
+                    result = agent_executor.invoke(payload)
+                    break
+                except Exception as e:
+                    last_error = e
+
+            if result is None:
+                print(f"❌ Error: {last_error}\n")
+                continue
+
+            # Extract final output robustly
+            output = None
             if isinstance(result, dict):
-                print(result.get("output") or result.get("result") or result)
+                output = result.get("output") or result.get("result") or result.get("content")
+                if not output and "messages" in result and result["messages"]:
+                    last_msg = result["messages"][-1]
+                    output = getattr(last_msg, "content", None) or last_msg
             else:
-                print(result)
+                output = result
+
+            print(f"✅ Result: {output}\n")
+
+        print("🎉 Agent demo complete!")
 
     except Exception as e:
         print(f"❌ Error running agent: {e}")

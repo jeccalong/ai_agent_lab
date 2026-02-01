@@ -164,8 +164,8 @@ def main() -> None:
         print("\nRunning example queries:\n")
 
         for query in test_queries:
-            print(f"📝 Query: {query}")
             print("─" * 50)
+            print(f"📝 Query: {query}\n")
 
             # Try common input payload shapes (LangChain-version dependent)
             payloads = [
@@ -201,7 +201,7 @@ def main() -> None:
 
             print(f"✅ Result: {output}\n")
 
-        print("🎉 Agent demo complete!")
+        print("🎉 Agent demo complete!\n")
 
     except Exception as e:
         print(f"❌ Error running agent: {e}")

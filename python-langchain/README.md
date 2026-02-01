@@ -5,7 +5,7 @@
 # Python LangChain AI Agent (Lab)
 
 
-This project is a **student lab demo** that explores how to build a simple tool-calling AI agent using **LangChain** and **GitHub Models**.
+This project is a **student lab demo** that explores how to build a simple tool-calling AI agent using **LangChain** and **GitHub Models**. It was completed as part of [Code:You](https://code-you.org/) AI course curriculum. 
 
 The goal of this lab is to understand:
 - how agents differ from simple chat completions

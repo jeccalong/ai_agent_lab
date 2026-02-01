@@ -127,6 +127,27 @@ def file_tool(action_and_content: str) -> str:
         return f"FileTool error: {e}"
 
 
+def web_search_tool(query: str) -> str:
+    """
+    Simulates web search results for a given query.
+    Takes a search query as a string input parameter.
+    Returns a mock search result string.
+    Includes basic error handling.
+    """
+    try:
+        query_clean = query.strip().lower()
+        if "python" in query_clean:
+            return "Python is a popular programming language known for its readability and versatility."
+        elif "weather" in query_clean:
+            return "Web search result: Today's weather is sunny and 72°F."
+        elif "news" in query_clean:
+            return "Web search result: AI is transforming technology in 2026."
+        else:
+            return f"No relevant web results found for '{query.strip()}'."
+    except Exception as e:
+        return f"WebSearchTool error: {e}"
+
+
 def build_agent_executor(llm, tools):
     """
     Builds an agent executor using create_agent(), adapting to the installed
@@ -241,6 +262,11 @@ def main() -> None:
             name="file_tool",
             func=file_tool,
             description="Reads from or writes to a text file.",
+        ),
+        Tool(
+            name="web_search_tool",
+            func=web_search_tool,
+            description="Simulates web search results for a given query.",
         ),
     ]
     print("🛠️ Tools initialized successfully!")

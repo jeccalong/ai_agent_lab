@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "@langchain/community": "^1.1.10",
+    "@langchain/core": "^1.1.18",
+    "@langchain/openai": "^1.2.4",
+    "dotenv": "^17.2.3",
+    "langchain": "^1.2.16"
+  }
+}

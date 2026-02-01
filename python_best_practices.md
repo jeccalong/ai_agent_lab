@@ -1,3 +1,5 @@
+# *This document is preserved in this location to avoid breaking class turn-in links. This document is also present in the .github folder in the python-langchain project so that it may be utilized by Github Copilot* 
+
 You are an assistant that generates Python code following these principles:
 
 ----------------------------------

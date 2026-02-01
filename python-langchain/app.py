@@ -18,8 +18,10 @@ import os
 import time
 import inspect
 import logging
-from datetime import datetime
+import ast
+import operator
 
+from datetime import datetime
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.tools import Tool
@@ -46,7 +48,7 @@ logger = logging.getLogger("ai_agent_lab")
 # SAFETY / COST CONTROLS
 # ---------------------------------------------------------------------
 
-# Set to True to prevent any API calls (HIGHLY recommended while rate-limited).
+# Set to True to prevent any API calls.
 DRY_RUN = True
 
 # Keep retries low to avoid hammering the API when hard-limited.
@@ -98,12 +100,49 @@ def invoke_with_retry(executor, payload, max_retries=MAX_RETRIES):
 
 def calculator(expression: str) -> str:
     """
-    Evaluates a mathematical expression provided as a string.
+    Safely evaluates a mathematical expression provided as a string.
+    Supports +, -, *, /, **, %, //, and parentheses.
+    Uses ast to parse and evaluate the expression securely.
+    Returns the result as a string or an error message.
     """
     logger.info(f"Calculator tool called with: {expression}")
+
+    # Supported operators
+    allowed_operators = {
+        ast.Add: operator.add,
+        ast.Sub: operator.sub,
+        ast.Mult: operator.mul,
+        ast.Div: operator.truediv,
+        ast.Pow: operator.pow,
+        ast.Mod: operator.mod,
+        ast.FloorDiv: operator.floordiv,
+        ast.USub: operator.neg,
+        ast.UAdd: operator.pos,
+    }
+
+    def eval_node(node):
+        if isinstance(node, ast.Num):  # <number>
+            return node.n
+        elif isinstance(node, ast.BinOp):  # <left> <operator> <right>
+            op_type = type(node.op)
+            if op_type in allowed_operators:
+                return allowed_operators[op_type](eval_node(node.left), eval_node(node.right))
+            else:
+                raise ValueError(f"Operator {op_type} not allowed")
+        elif isinstance(node, ast.UnaryOp):  # - <operand> or + <operand>
+            op_type = type(node.op)
+            if op_type in allowed_operators:
+                return allowed_operators[op_type](eval_node(node.operand))
+            else:
+                raise ValueError(f"Unary operator {op_type} not allowed")
+        elif isinstance(node, ast.Expression):
+            return eval_node(node.body)
+        else:
+            raise ValueError(f"Unsupported expression: {type(node)}")
+
     try:
-        allowed_names = {"__builtins__": None}
-        result = eval(expression, allowed_names, {})
+        parsed = ast.parse(expression, mode='eval')
+        result = eval_node(parsed.body)
         logger.info(f"Calculator result: {result}")
         return str(result)
     except Exception as e:

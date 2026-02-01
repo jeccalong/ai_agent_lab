@@ -263,6 +263,24 @@ def build_agent_executor(llm, tools, memory=None):
 # MAIN
 # ---------------------------------------------------------------------
 
+def sanitize_query(query: str) -> str:
+    """
+    Sanitizes and validates user queries.
+    - Strips leading/trailing whitespace.
+    - Ensures the query is a non-empty string.
+    - Optionally, could add more checks (length, forbidden patterns, etc.).
+    Returns the sanitized query or raises ValueError if invalid.
+    """
+    if not isinstance(query, str):
+        logger.error("Query is not a string.")
+        raise ValueError("Query must be a string.")
+    sanitized = query.strip()
+    if not sanitized:
+        logger.error("Query is empty after stripping whitespace.")
+        raise ValueError("Query cannot be empty.")
+    # Additional validation logic can be added here
+    return sanitized
+
 def main() -> None:
     logger.info("🤖 Python LangChain Agent Starting...")
 
@@ -336,11 +354,20 @@ def main() -> None:
 
     for query in test_queries:
         print("─" * 50)
-        print(f"📝 Query: {query}\n")
-        logger.info(f"AI interaction started for query: {query}")
+        try:
+            sanitized_query = sanitize_query(query)
+        except ValueError as ve:
+            print(f"❌ Invalid query: {ve}\n")
+            logger.error(f"Invalid query: {ve}")
+            continue
+
+        print(f"📝 Query: {sanitized_query}\n")
+        logger.info(f"AI interaction started for query: {sanitized_query}")
+
+        start_time = time.time()  # Start timing
 
         try:
-            result = invoke_with_retry(agent_executor, {"input": query})
+            result = invoke_with_retry(agent_executor, {"input": sanitized_query})
 
             output = None
             if isinstance(result, dict):
@@ -351,12 +378,16 @@ def main() -> None:
             else:
                 output = result
 
+            elapsed = time.time() - start_time  # End timing
             print(f"✅ Result: {output}\n")
             logger.info(f"AI interaction result: {output}")
+            logger.info(f"Query response time: {elapsed:.2f} seconds")
 
         except Exception as e:
+            elapsed = time.time() - start_time  # End timing even on error
             print(f"❌ Error: {e}\n")
             logger.error(f"AI interaction error: {e}")
+            logger.info(f"Query response time (with error): {elapsed:.2f} seconds")
 
     print("🎉 Agent demo complete!\n")
     logger.info("🎉 Agent demo complete!")

@@ -1,5 +1,6 @@
 import os
 import inspect
+import time
 from datetime import datetime
 
 from dotenv import load_dotenv
@@ -8,6 +9,28 @@ from langchain_core.tools import Tool
 from langchain.agents import create_agent
 from langchain_core.prompts import ChatPromptTemplate
 
+
+def invoke_with_retry(executor, payload, max_retries=5):
+    """
+    Invokes the agent executor with retries for rate limiting / transient failures.
+    Uses exponential backoff.
+    """
+    delay = 1  # seconds
+    for attempt in range(1, max_retries + 1):
+        try:
+            return executor.invoke(payload)
+        except Exception as e:
+            msg = str(e).lower()
+            if "too many requests" in msg or "429" in msg or "rate limit" in msg:
+                if attempt == max_retries:
+                    raise
+                print(f"⏳ Rate limited (attempt {attempt}/{max_retries}). Retrying in {delay}s...\n")
+                time.sleep(delay)
+                delay = min(delay * 2, 16)
+                continue
+            raise
+
+
 def calculator(expression: str) -> str:
     """
     Evaluates a mathematical expression provided as a string.
@@ -15,7 +38,6 @@ def calculator(expression: str) -> str:
     WARNING: Do not use eval() with untrusted input in production.
     """
     try:
-        # Restrict eval to prevent access to builtins (demo safety measure)
         allowed_names = {"__builtins__": None}
         result = eval(expression, allowed_names, {})
         return str(result)
@@ -26,8 +48,6 @@ def calculator(expression: str) -> str:
 def get_current_time(_: str) -> str:
     """
     Returns the current date and time as a formatted string.
-    Uses datetime.now().strftime("%Y-%m-%d %H:%M:%S").
-    The input parameter is required by the Tool interface but is not used.
     """
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -35,9 +55,23 @@ def get_current_time(_: str) -> str:
 def reverse_string(s: str) -> str:
     """
     Reverses a string.
-    Takes a string input parameter and returns the reversed string using Python slice notation [::-1].
     """
     return s[::-1]
+
+
+def get_weather(date_str: str) -> str:
+    """
+    Returns weather information for a given date string in "YYYY-MM-DD" format.
+    If the date matches today's date, returns "Sunny, 72°F".
+    For all other dates, returns "Rainy, 55°F".
+    """
+    try:
+        today = datetime.now().strftime("%Y-%m-%d")
+        if date_str == today:
+            return "Sunny, 72°F"
+        return "Rainy, 55°F"
+    except Exception as e:
+        return f"Error retrieving weather: {e}"
 
 
 def build_agent_executor(llm, tools):
@@ -45,10 +79,17 @@ def build_agent_executor(llm, tools):
     Builds an agent executor using create_agent(), adapting to the installed
     LangChain version's function signature.
     """
-    # Add a system message to instruct the AI to be professional and succinct
     prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are a professional and succinct AI assistant. Respond clearly and concisely."),
-        ("user", "{input}")
+        (
+            "system",
+            "You are professional and succinct. "
+            "Use tools whenever needed. "
+            "If asked about the weather 'today', first call get_current_time to get today's date, "
+            "then call get_weather with the date formatted as YYYY-MM-DD."
+        ),
+        ("user", "{input}"),
+        # Many tool-calling agents expect this placeholder; harmless if unused.
+        ("placeholder", "{agent_scratchpad}"),
     ])
 
     sig = inspect.signature(create_agent)
@@ -66,7 +107,6 @@ def build_agent_executor(llm, tools):
     elif "toolkit" in params:
         kwargs["toolkit"] = tools
 
-    # Add the prompt if supported
     if "prompt" in params:
         kwargs["prompt"] = prompt
 
@@ -89,18 +129,11 @@ def build_agent_executor(llm, tools):
     ]
 
     for args in attempts:
-        try:
-            return create_agent(*args, debug=True)
-        except TypeError:
-            pass
-        try:
-            return create_agent(*args, verbose=True)
-        except TypeError:
-            pass
-        try:
-            return create_agent(*args)
-        except TypeError:
-            pass
+        for extra in ({"debug": True}, {"verbose": True}, {}):
+            try:
+                return create_agent(*args, **extra)
+            except TypeError:
+                pass
 
     raise TypeError(f"Could not construct agent with create_agent(). Signature: {sig}")
 
@@ -125,35 +158,30 @@ def main() -> None:
     )
     print("🧠 Language model initialized successfully!")
 
-    # Prompt 10: Create tools list with Calculator tool
     tools = [
         Tool(
             name="Calculator",
             func=calculator,
-            description=(
-                "Use this tool to evaluate mathematical expressions, "
-                "such as arithmetic operations (addition, subtraction, multiplication, division), "
-                "and to solve math problems provided as strings. "
-                "Use it whenever a calculation or numeric result is required."
-            ),
+            description="Evaluates mathematical expressions. Input should be a math expression string.",
         ),
         Tool(
             name="get_current_time",
             func=get_current_time,
-            description=(
-                "Use this tool to get the current date and time. "
-                "Use it whenever a user asks for the current time or date."
-            ),
+            description="Returns the current date and time as 'YYYY-MM-DD HH:MM:SS'.",
         ),
         Tool(
             name="reverse_string",
             func=reverse_string,
             description="Reverses a string. Input should be a single string.",
         ),
+        Tool(
+            name="get_weather",
+            func=get_weather,
+            description="Returns weather info for a date string formatted as 'YYYY-MM-DD'.",
+        ),
     ]
     print("🛠️ Tools initialized successfully!")
 
-    # Prompt 11: Create agent with Calculator tool and run a test query
     try:
         agent_executor = build_agent_executor(llm, tools)
 
@@ -161,6 +189,8 @@ def main() -> None:
             "What time is it right now?",
             "What is 25 * 4 + 10?",
             "Reverse the string 'Hello World'",
+            "What's the weather like today?",
+            "What is the weather for 2023-04-05?",
         ]
 
         print("\nRunning example queries:\n")
@@ -169,39 +199,21 @@ def main() -> None:
             print("─" * 50)
             print(f"📝 Query: {query}\n")
 
-            # Try common input payload shapes (LangChain-version dependent)
-            payloads = [
-                {"input": query},
-                {"query": query},
-                {"question": query},
-                {"messages": [{"role": "user", "content": query}]},
-            ]
+            try:
+                result = invoke_with_retry(agent_executor, {"input": query})
 
-            result = None
-            last_error = None
+                if isinstance(result, dict):
+                    output = result.get("output") or result.get("result") or result.get("content")
+                    if not output and "messages" in result and result["messages"]:
+                        last_msg = result["messages"][-1]
+                        output = getattr(last_msg, "content", None) or last_msg
+                else:
+                    output = result
 
-            for payload in payloads:
-                try:
-                    result = agent_executor.invoke(payload)
-                    break
-                except Exception as e:
-                    last_error = e
+                print(f"✅ Result: {output}\n")
 
-            if result is None:
-                print(f"❌ Error: {last_error}\n")
-                continue
-
-            # Extract final output robustly
-            output = None
-            if isinstance(result, dict):
-                output = result.get("output") or result.get("result") or result.get("content")
-                if not output and "messages" in result and result["messages"]:
-                    last_msg = result["messages"][-1]
-                    output = getattr(last_msg, "content", None) or last_msg
-            else:
-                output = result
-
-            print(f"✅ Result: {output}\n")
+            except Exception as e:
+                print(f"❌ Error: {e}\n")
 
         print("🎉 Agent demo complete!\n")
 
@@ -211,3 +223,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

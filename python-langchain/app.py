@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.tools import Tool
 from langchain.agents import create_agent
-
+from langchain_core.prompts import ChatPromptTemplate
 
 def calculator(expression: str) -> str:
     """
@@ -45,10 +45,15 @@ def build_agent_executor(llm, tools):
     Builds an agent executor using create_agent(), adapting to the installed
     LangChain version's function signature.
     """
+    # Add a system message to instruct the AI to be professional and succinct
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", "You are a professional and succinct AI assistant. Respond clearly and concisely."),
+        ("user", "{input}")
+    ])
+
     sig = inspect.signature(create_agent)
     params = sig.parameters
 
-    # Try keyword-based construction if possible (varies by version)
     kwargs = {}
 
     if "llm" in params:
@@ -61,7 +66,10 @@ def build_agent_executor(llm, tools):
     elif "toolkit" in params:
         kwargs["toolkit"] = tools
 
-    # Debug/verbose flag also varies by version
+    # Add the prompt if supported
+    if "prompt" in params:
+        kwargs["prompt"] = prompt
+
     if "debug" in params:
         kwargs["debug"] = True
     elif "verbose" in params:
@@ -71,35 +79,29 @@ def build_agent_executor(llm, tools):
         try:
             return create_agent(**kwargs)
         except TypeError:
-            # Fall back to positional attempts below
             pass
 
-    # Positional fallbacks (order differs by version)
     attempts = [
+        (llm, tools, prompt),
+        (tools, llm, prompt),
         (llm, tools),
         (tools, llm),
     ]
 
     for args in attempts:
-        # Try with debug
         try:
             return create_agent(*args, debug=True)
         except TypeError:
             pass
-
-        # Try with verbose
         try:
             return create_agent(*args, verbose=True)
         except TypeError:
             pass
-
-        # Try without flags
         try:
             return create_agent(*args)
         except TypeError:
             pass
 
-    # If we got here, we couldn't match the signature
     raise TypeError(f"Could not construct agent with create_agent(). Signature: {sig}")
 
 

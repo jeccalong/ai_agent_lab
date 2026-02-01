@@ -74,6 +74,29 @@ def get_weather(date_str: str) -> str:
         return f"Error retrieving weather: {e}"
 
 
+def weather_tool_city(city: str) -> str:
+    """
+    Returns mock weather data for a given city.
+    Takes a city name as a string input parameter.
+    Returns a mock weather string based on the city name.
+    Includes basic error handling.
+    """
+    try:
+        city_clean = city.strip().lower()
+        if city_clean == "san francisco":
+            return "San Francisco: Foggy, 60°F"
+        elif city_clean == "new york":
+            return "New York: Sunny, 75°F"
+        elif city_clean == "seattle":
+            return "Seattle: Rainy, 55°F"
+        elif city_clean == "los angeles":
+            return "Los Angeles: Sunny, 80°F"
+        else:
+            return f"{city.strip().title()}: Weather data not available, defaulting to Cloudy, 68°F"
+    except Exception as e:
+        return f"Error retrieving weather for {city}: {e}"
+
+
 def build_agent_executor(llm, tools):
     """
     Builds an agent executor using create_agent(), adapting to the installed
@@ -179,6 +202,11 @@ def main() -> None:
             func=get_weather,
             description="Returns weather info for a date string formatted as 'YYYY-MM-DD'.",
         ),
+        Tool(
+            name="weather_tool_city",
+            func=weather_tool_city,
+            description="Returns mock weather data for a given city.",
+        ),
     ]
     print("🛠️ Tools initialized successfully!")
 
@@ -191,6 +219,11 @@ def main() -> None:
             "Reverse the string 'Hello World'",
             "What's the weather like today?",
             "What is the weather for 2023-04-05?",
+            "What is the weather in San Francisco?",
+            "What is the weather in New York?",
+            "What is the weather in Seattle?",
+            "What is the weather in Los Angeles?",
+            "What is the weather in Chicago?",
         ]
 
         print("\nRunning example queries:\n")

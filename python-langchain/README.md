@@ -4,8 +4,7 @@
 
 # Python LangChain AI Agent (Lab)
 
-
-This project is a **student lab demo** that explores how to build a simple tool-calling AI agent using **LangChain** and **GitHub Models**. It was completed as part of [Code:You](https://code-you.org/) AI course curriculum. 
+This project is a **student lab demo** that explores how to build a simple tool-calling AI agent using **LangChain** and **GitHub Models**. It was completed as part of [Code:You](https://code-you.org/) AI course curriculum.
 
 The goal of this lab is to understand:
 - how agents differ from simple chat completions
@@ -27,6 +26,7 @@ The goal of this lab is to understand:
   - Mock weather lookup
 - Demonstrates tool-calling through a LangChain agent
 - Includes explicit safety flags to control when API calls occur
+- **Includes a rate limit probe utility to check your current API rate limit status**
 
 ---
 
@@ -35,7 +35,8 @@ The goal of this lab is to understand:
 ```
 python-langchain/
 ├── app.py
-├── .env            # API token (not committed)
+├── rate_limit_probe.py   # Utility to check API rate limit status
+├── .env                  # API token (not committed)
 ├── .gitignore
 └── README.md
 ```
@@ -64,7 +65,7 @@ Create a `.env` file in the project root:
 GITHUB_TOKEN=your_github_models_token_here
 ```
 
-This token is **only required when running agent tests**.  
+This token is **only required when running agent tests or the rate limit probe**.  
 Local tool tests do **not** require any API access.
 
 ---
@@ -156,12 +157,29 @@ python app.py
 
 ---
 
+## Rate Limit Probe Utility
+
+A dedicated script, `rate_limit_probe.py`, is included to help you check your current API rate limit status **before running agent tests**. This helps you avoid accidental rate limit violations.
+
+### Usage
+
+```bash
+python rate_limit_probe.py
+```
+
+- Loads your GitHub Models token from `.env`
+- Sends a minimal request to the API
+- Prints whether you are currently rate-limited and how long to wait if so
+
+---
+
 ## Rate Limiting Behavior
 
 - HTTP 429 errors are detected
 - Retries are intentionally limited
 - The program fails fast with clear messaging
 - Cooldowns reduce accidental API spamming
+- Use `rate_limit_probe.py` to check your status before running agent tests
 
 ---
 

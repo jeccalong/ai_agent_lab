@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../assets/header.png" alt="Python LangChain AI Agent" />
+  <img src="../assets/python_header.png" alt="Python LangChain AI Agent" />
 </p>
 
 # Python LangChain AI Agent (Lab)

@@ -49,10 +49,16 @@ logger = logging.getLogger("ai_agent_lab")
 # ---------------------------------------------------------------------
 
 # Set to True to prevent any API calls.
-DRY_RUN = True
+DRY_RUN = False
 
-# Keep retries low to avoid hammering the API when hard-limited.
-MAX_RETRIES = 2
+# Run local tool tests even when DRY_RUN=True (no model calls)
+RUN_LOCAL_TOOL_TESTS = True
+
+# Run agent tests (requires model calls)
+RUN_AGENT_TESTS = False
+
+# Cooldown between agent queries to avoid spamming
+COOLDOWN_SECONDS = 8
 
 # Toggle debug/verbose logs. Debug output can increase token usage.
 DEBUG = False
@@ -62,7 +68,7 @@ DEBUG = False
 # RETRY / RATE LIMIT HANDLING
 # ---------------------------------------------------------------------
 
-def invoke_with_retry(executor, payload, max_retries=MAX_RETRIES):
+def invoke_with_retry(executor, payload, max_retries=1):
     """
     Invoke the agent executor with limited retries for transient failures.
 
@@ -98,6 +104,21 @@ def invoke_with_retry(executor, payload, max_retries=MAX_RETRIES):
 # TOOLS
 # ---------------------------------------------------------------------
 
+def run_local_tool_tests():
+    print("\nRunning LOCAL tool tests (no API):\n")
+    print("─" * 50)
+
+    print("🧮 Calculator:", calculator("25 * 4 + 10"))          # expect 110
+    print("🕒 Time:", get_current_time(""))                     # current timestamp
+    print("📅 Date:", get_current_date(""))                     # current date
+    print("🔁 Reverse:", reverse_string("Hello World"))         # "dlroW olleH"
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    print("🌤️ Weather today:", get_weather(today))             # "Sunny, 72°F"
+    print("🌧️ Weather 2023-04-05:", get_weather("2023-04-05")) # "Rainy, 55°F"
+    print("🎉 Local tool tests complete!\n")
+
+
 def calculator(expression: str) -> str:
     """
     Safely evaluates a mathematical expression provided as a string.
@@ -121,24 +142,32 @@ def calculator(expression: str) -> str:
     }
 
     def eval_node(node):
-        if isinstance(node, ast.Num):  # <number>
-            return node.n
-        elif isinstance(node, ast.BinOp):  # <left> <operator> <right>
+        # Numbers (Python 3.8+)
+        if isinstance(node, ast.Constant):
+            if isinstance(node.value, (int, float)):
+                return node.value
+            raise ValueError("Only int/float constants are allowed")
+
+        # Binary operations: <left> <op> <right>
+        if isinstance(node, ast.BinOp):
             op_type = type(node.op)
             if op_type in allowed_operators:
                 return allowed_operators[op_type](eval_node(node.left), eval_node(node.right))
-            else:
-                raise ValueError(f"Operator {op_type} not allowed")
-        elif isinstance(node, ast.UnaryOp):  # - <operand> or + <operand>
+            raise ValueError(f"Operator {op_type} not allowed")
+
+        # Unary operations: - <operand> or + <operand>
+        if isinstance(node, ast.UnaryOp):
             op_type = type(node.op)
             if op_type in allowed_operators:
                 return allowed_operators[op_type](eval_node(node.operand))
-            else:
-                raise ValueError(f"Unary operator {op_type} not allowed")
-        elif isinstance(node, ast.Expression):
+            raise ValueError(f"Unary operator {op_type} not allowed")
+
+        # Expression wrapper
+        if isinstance(node, ast.Expression):
             return eval_node(node.body)
-        else:
-            raise ValueError(f"Unsupported expression: {type(node)}")
+
+        raise ValueError(f"Unsupported expression: {type(node)}")
+
 
     try:
         parsed = ast.parse(expression, mode='eval')
@@ -323,9 +352,35 @@ def sanitize_query(query: str) -> str:
 def main() -> None:
     logger.info("🤖 Python LangChain Agent Starting...")
 
-    if DRY_RUN:
-        logger.warning("🚫 DRY_RUN is enabled — no API calls will be made.")
+def main() -> None:
+    logger.info("🤖 Python LangChain Agent Starting...")
+
+    # Always allow local tests without any token/env/LLM.
+    if RUN_LOCAL_TOOL_TESTS:
+        run_local_tool_tests()
+
+    # If agent tests are off, stop here (no API calls).
+    if not RUN_AGENT_TESTS:
+        logger.info("🛑 RUN_AGENT_TESTS is False — skipping model/agent calls.")
         return
+
+    # If you want DRY_RUN as an extra safety switch:
+    if DRY_RUN:
+        logger.warning("🚫 DRY_RUN is enabled — skipping model/agent calls.")
+        return
+
+    load_dotenv()
+    token = os.getenv("GITHUB_TOKEN")
+    ...
+    llm = ChatOpenAI(...)
+    agent_executor = build_agent_executor(llm, tools, memory=memory)
+
+    print("\nRunning example queries:\n")
+    for query in test_queries:
+        ...
+        result = invoke_with_retry(agent_executor, {"input": sanitized_query})
+
+
 
     load_dotenv()
     token = os.getenv("GITHUB_TOKEN")

@@ -1,11 +1,14 @@
+// app.js
+// JavaScript LangChain AI Agent - Starter
+// Follows project and Copilot JS guidelines for clarity and maintainability.
+
 import "dotenv/config";
 import { ChatOpenAI } from "@langchain/openai";
 
-// app.js
-// JavaScript LangChain AI Agent - Starter
-
-// ES6 module imports (add more as needed)
-
+/**
+ * Main entry point for the AI agent demo.
+ * Loads config, checks for token, runs a test query.
+ */
 async function main() {
   console.log("🤖 JavaScript LangChain Agent Starting...");
 
@@ -28,7 +31,7 @@ async function main() {
     apiKey: token,
   });
 
-  // Test query
+  // Run a test query
   const query = "What is 25 * 4 + 10?";
   console.log(`📝 Query: ${query}`);
   try {

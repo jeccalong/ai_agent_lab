@@ -2,120 +2,81 @@
   <img src="../assets/javascript_header.png" alt="JavaScript LangChain AI Agent" />
 </p>
 
-# JavaScript LangChain AI Agent (Lab)
+# JavaScript LangChain AI Agent Lab (Current State)
 
-This project is a **student lab demo** that explores how to build a simple tool-calling AI agent using **LangChain (JavaScript)** and **GitHub Models**. It was completed as part of the [Code:You](https://code-you.org/) AI course curriculum.
+This folder contains the **current working version** of the JavaScript LangChain agent demo for the AI Agent Lab.
 
-The goal of this lab is to understand:
-- how agents differ from simple chat completions
-- how tools are defined and invoked in JavaScript
-- how to safely integrate an external LLM API from Node.js
-- how to avoid accidental rate-limit abuse during development
+This README supplement describes the present state of `app.js` and its capabilities, not the projected or final lab requirements.
 
----
-
-## Features
-
-- Loads a GitHub Models API token from `.env`
-- Creates a LangChain chat model client targeting GitHub Models
-- Defines several simple tools:
-  - Calculator (restricted evaluation)
-  - Current time
-  - Current date
-  - String reversal
-  - Mock weather lookup
-- Demonstrates tool-calling through a LangChain agent
-- Includes explicit safety flags to control when API calls occur
-- Designed to minimize token usage and avoid API spamming
+<p align="center">
+  <img alt="JavaScript" src="https://img.shields.io/badge/JavaScript-ES2022+-8C2053?style=flat-square&logo=javascript&logoColor=white" />
+  <img alt="Node.js" src="https://img.shields.io/badge/Node.js-18+-8C2053?style=flat-square&logo=node.js&logoColor=white" />
+  <img alt="LangChain" src="https://img.shields.io/badge/LangChain-Agents-8C2053?style=flat-square" />
+  <img alt="GitHub Models" src="https://img.shields.io/badge/GitHub%20Models-API-8C2053?style=flat-square&logo=github&logoColor=white" />
+</p>
 
 ---
 
-## Project Structure
+## Files in this folder
 
-```
-javascript_langchain/
-├── src/
-│   └── app.js
-├── .gitignore
-├── package.json
-├── package-lock.json
-└── README.md
-```
+### `app.js`
+This is the **current working version** of the JavaScript LangChain agent demo.
+
+It demonstrates:
+- Creating a chat model client using GitHub Models
+- Defining a single local tool (calculator) in JavaScript using zod for schema validation
+- Allowing the agent to decide when to call the tool
+- Handling tool outputs in an async/await flow
+- Returning a final response to the user
+
 ---
 
-## Requirements
+## Setup
 
-- Node.js 18+
-- npm (bundled with Node)
-- Access to GitHub Models
+### 1. Install dependencies
 
-Install dependencies:
-
+```bash
 npm install
+```
 
----
-
-## Environment Setup
+### 2. Environment variable
 
 Create a `.env` file in the project root:
 
-GITHUB_TOKEN=your_github_models_token_here
+```env
+GITHUB_TOKEN=your_token_here
+```
 
-This token is **only required when running agent tests**.
-Local tool logic can be exercised without any API access if safety flags are enabled.
-
----
-
-## Testing & Safety Flags (Important)
-
-All external model calls are explicitly controlled by flags near the top of `src/app.js`.
-
-const DRY_RUN = false;
-const RUN_LOCAL_TOOL_TESTS = true;
-const RUN_AGENT_TESTS = false;
-const COOLDOWN_MS = 8000;
-const DEBUG = false;
+The token is loaded at runtime and is not committed to version control.
 
 ---
 
-## Running the Program
+## Running the agent demo
 
-From the project directory:
+From this folder:
 
-npm start
-
-or
-
-node src/app.js
+```bash
+node app.js
+```
 
 ---
 
-## Rate Limiting Behavior
+## Tools included in the agent (current state)
 
-- HTTP 429 errors are detected
-- Retries are intentionally limited
-- The program fails fast with clear messaging
-- Cooldowns reduce accidental API spamming
-- Development defaults favor safety over speed
+### Calculator
+Evaluates basic math expressions.
 
----
-
-## Security Notes
-
-- API tokens are loaded from environment variables
-- `.env` files should never be committed
-- The calculator tool is **not production-safe**
-  - Implemented strictly for educational purposes
+- Implemented locally in JavaScript as a DynamicStructuredTool
+- Uses zod for input schema validation
+- Intended for demonstration purposes only
 
 ---
 
-## Educational Context
+## Rate limiting notes
 
-This lab demonstrates:
-- basic AI agent orchestration in JavaScript
-- tool-based reasoning
-- controlled API usage from Node.js
-- safe local testing patterns
+If you encounter a `429 Too Many Requests` error while running the JavaScript agent, it means the GitHub Models API rate limit has been reached.
+
+The current implementation does not include retry or cooldown logic. You must wait for the rate limit to reset before running more queries.
 
 ---
 

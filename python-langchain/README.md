@@ -2,206 +2,132 @@
   <img src="../assets/python_header.png" alt="Python LangChain AI Agent" />
 </p>
 
-# Python LangChain AI Agent (Lab)
+# Python LangChain AI Agent Lab
 
-This project is a **student lab demo** that explores how to build a simple tool-calling AI agent using **LangChain** and **GitHub Models**. It was completed as part of [Code:You](https://code-you.org/) AI course curriculum.
+This folder contains my finalized Python LangChain agent demo for the AI Agent Lab, along with a small utility script used to check GitHub Models API rate limits.
 
-The goal of this lab is to understand:
-- how agents differ from simple chat completions
-- how tools are defined and invoked
-- how to safely integrate an external LLM API
-- how to avoid accidental rate-limit abuse during development
+This README is intended to **extend** the main project README, not duplicate it. It focuses specifically on what lives in this folder and how it fits into the lab requirements.
 
----
+<p align="center">
+  <img alt="Python" src="https://img.shields.io/badge/Python-3.10%2B-8C2053?style=flat-square&logo=python&logoColor=white" />
+  <img alt="LangChain" src="https://img.shields.io/badge/LangChain-Agents-8C2053?style=flat-square&logo=langchain&logoColor=white" />
+  <img alt="GitHub Models" src="https://img.shields.io/badge/GitHub%20Models-API-8C2053?style=flat-square&logo=github&logoColor=white" />
+</p>
 
-## Features
 
-- Loads a GitHub Models API token from `.env`
-- Creates a `ChatOpenAI` client pointing at GitHub Models
-- Defines several simple tools:
-  - Calculator (AST-based, restricted evaluation)
-  - Current time
-  - Current date
-  - String reversal
-  - Mock weather lookup
-- Demonstrates tool-calling through a LangChain agent
-- Includes explicit safety flags to control when API calls occur
-- **Includes a rate limit probe utility to check your current API rate limit status**
+
 
 ---
 
-## Project Structure
+## Files in this folder
 
-```
-python-langchain/
-├── app.py
-├── rate_limit_probe.py   # Utility to check API rate limit status
-├── .env                  # API token (not committed)
-├── .gitignore
-└── README.md
-```
+### `app.py`
+This is the **final working version** of my LangChain agent demo.
+
+It demonstrates:
+- Creating a chat model using GitHub Models
+- Defining local tools
+- Letting the agent decide when to call those tools
+- Handling tool outputs correctly
+- Returning a final response to the user
+
+This file replaces earlier test scripts. Any previous `test.py` file was removed once the logic was verified and stabilized.
 
 ---
 
-## Requirements
+### `rate_limit_probe.py`
+A small utility script used to safely check whether the GitHub Models API is currently rate-limiting requests.
 
-- Python 3.10+
-- Virtual environment recommended
-- Access to GitHub Models
+- Sends a minimal request
+- Avoids burning tokens
+- Prints a clear success or rate-limit message
 
-Install dependencies (example):
+This script is helpful when debugging `429 Too Many Requests` errors during development.
+
+---
+
+## Setup
+
+### 1. Install dependencies
 
 ```bash
-pip install langchain langchain-openai python-dotenv
+pip install -r requirements.txt
 ```
 
----
-
-## Environment Setup
+### 2. Environment variable
 
 Create a `.env` file in the project root:
 
 ```env
-GITHUB_TOKEN=your_github_models_token_here
+GITHUB_TOKEN=your_token_here
 ```
 
-This token is **only required when running agent tests or the rate limit probe**.  
-Local tool tests do **not** require any API access.
+The token is loaded at runtime and is not committed to version control.
 
 ---
 
-## Testing Flags (Important)
-
-All external model calls are explicitly controlled by flags at the top of `app.py`.
-
-```python
-DRY_RUN = False
-RUN_LOCAL_TOOL_TESTS = True
-RUN_AGENT_TESTS = False
-COOLDOWN_SECONDS = 8
-DEBUG = False
-```
-
-### RUN_LOCAL_TOOL_TESTS
-
-- Runs local tool tests only
-- No API calls are made
-- Safe to run even when rate-limited
-- Does not require a GitHub token
-
----
-
-### RUN_AGENT_TESTS
-
-- Enables LLM and agent execution
-- Initializes the model
-- Sends queries to GitHub Models
-- Uses LangChain tool-calling
-
-When set to `False`, **no API calls occur**.
-
----
-
-### DRY_RUN
-
-- Additional safety switch
-- If `True`, agent tests are skipped even if enabled
-- Guarantees no external API calls
-
----
-
-### COOLDOWN_SECONDS
-
-- Adds a delay between agent queries
-- Helps avoid triggering rate limits
-- Only applies when agent tests are enabled
-
----
-
-### DEBUG
-
-- Enables verbose/debug logging (if supported by LangChain)
-- Can increase token usage
-- Disabled by default
-
----
-
-## Recommended Flag Combinations
-
-### Local Testing Only (No API Calls)
-
-```python
-RUN_LOCAL_TOOL_TESTS = True
-RUN_AGENT_TESTS = False
-```
-
----
-
-### Agent Testing (Uses API)
-
-```python
-RUN_LOCAL_TOOL_TESTS = False
-RUN_AGENT_TESTS = True
-COOLDOWN_SECONDS = 8
-```
-
----
-
-## Running the Program
-
-From the project directory:
+## Running the agent demo
 
 ```bash
-python app.py
+python python-langchain/app.py
+```
+
+When run successfully, the script executes a set of example queries and logs the full agent execution flow, including:
+
+- user input
+- model reasoning
+- tool calls
+- tool outputs
+- final responses
+
+---
+
+## Tools included in the agent
+
+### Calculator
+Evaluates basic math expressions.
+
+- Uses `eval()` with restricted built-ins
+- Includes basic error handling
+- Intended for demo purposes only
+
+---
+
+### get_current_time
+Returns the current date and time in the format:
+
+```
+YYYY-MM-DD HH:MM:SS
 ```
 
 ---
 
-## Rate Limit Probe Utility
+### reverse_string
+Takes a string input and returns the reversed string.
 
-A dedicated script, `rate_limit_probe.py`, is included to help you check your current API rate limit status **before running agent tests**. This helps you avoid accidental rate limit violations.
+---
 
-### Usage
+### get_weather (MOCK TOOL)
+This is a **mock weather tool**, not a real API call.
+
+Behavior:
+- If the date is today → returns `Sunny, 72°F`
+- Any other valid date → returns `Rainy, 55°F`
+- If the input is not in `YYYY-MM-DD` format, the tool returns an error message
+
+This tool exists purely to demonstrate how an agent interprets date-based questions and selects tools. No real weather data is used.
+
+---
+
+## Rate limiting notes
+
+If you encounter a `429 Too Many Requests` error while running `app.py`, it usually means the GitHub Models API rate limit has been reached.
+
+To check before running the agent:
 
 ```bash
-python rate_limit_probe.py
+python python-langchain/rate_limit_probe.py
 ```
 
-- Loads your GitHub Models token from `.env`
-- Sends a minimal request to the API
-- Prints whether you are currently rate-limited and how long to wait if so
+This helps avoid unnecessary debugging when the issue is simply request limits.
 
----
-
-## Rate Limiting Behavior
-
-- HTTP 429 errors are detected
-- Retries are intentionally limited
-- The program fails fast with clear messaging
-- Cooldowns reduce accidental API spamming
-- Use `rate_limit_probe.py` to check your status before running agent tests
-
----
-
-## Security Notes
-
-- API tokens are loaded from environment variables
-- `.env` files should never be committed
-- The calculator tool is **not production-safe**
-  - Implemented strictly for educational purposes
-
----
-
-## Educational Context
-
-This lab demonstrates:
-- basic AI agent orchestration
-- tool-based reasoning
-- controlled API usage
-- safe local testing patterns
-
----
-
-## License
-
-Educational use only.

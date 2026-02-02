@@ -1,50 +1,27 @@
-"""
-Python LangChain AI Agent (Lab)
-
-Goals:
-- Load GitHub Models token from .env
-- Create a ChatOpenAI client against GitHub Models
-- Define simple tools (calculator, time/date, reverse string, mock weather)
-- Run a few example queries through a tool-calling agent
-- Be resilient to GitHub Models rate limiting (HTTP 429 / "Too many requests")
-- Avoid accidentally spamming the API (DRY_RUN + minimal payload attempts)
-
-Notes:
-- This is a student lab demo. The calculator uses ast for safe math parsing.
-"""
-
 import os
-import time
-import inspect
 import logging
-import ast
-import operator
+import time
 import re
-
 from datetime import datetime
+
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.tools import Tool
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.messages import HumanMessage
+
 from langchain.agents import create_agent
 
-try:
-    from langchain_community.memory import ConversationBufferMemory
-except Exception:
-    ConversationBufferMemory = None
 
 # ---------------------------------------------------------------------
-# CONFIGURATION & CONSTANTS
+# CONFIG
 # ---------------------------------------------------------------------
-DRY_RUN = False
-RUN_LOCAL_TOOL_TESTS = True
-RUN_AGENT_TESTS = False
-COOLDOWN_SECONDS = 8
-DEBUG = False
-SLOW_QUERY_THRESHOLD = 2.0  # seconds
+DEBUG = True
+MAX_RETRIES = 1
+RETRY_DELAY_SECONDS = 5
+
 
 # ---------------------------------------------------------------------
-# LOGGING SETUP
+# LOGGING
 # ---------------------------------------------------------------------
 logging.basicConfig(
     level=logging.INFO,
@@ -53,274 +30,127 @@ logging.basicConfig(
 )
 logger = logging.getLogger("ai_agent_lab")
 
+
 # ---------------------------------------------------------------------
-# RETRY / RATE LIMIT HANDLING
+# TOOLS
 # ---------------------------------------------------------------------
-def invoke_with_retry(executor, payload, max_retries=1):
+def calculator(expression: str) -> str:
     """
-    Invoke the agent executor with limited retries for transient failures.
-    Retries only a small number of times, then fails fast with a clear message.
+    Evaluates a mathematical expression provided as a string.
+    For demo purposes, uses Python's eval() with basic error handling.
+    WARNING: Do not use eval() with untrusted input in production.
     """
-    delay_seconds = 2
-    for attempt in range(1, max_retries + 1):
+    try:
+        allowed_names = {"__builtins__": None}
+        result = eval(expression, allowed_names, {})
+        return str(result)
+    except Exception as e:
+        return f"Error evaluating expression: {e}"
+
+
+def get_current_time(_: str) -> str:
+    """Returns the current date and time as a formatted string."""
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def reverse_string(s: str) -> str:
+    """Reverses a string."""
+    return s[::-1]
+
+
+def get_weather(date_str: str) -> str:
+    """
+    Mock weather tool.
+
+    Accepts:
+    - 'today' (case-insensitive)
+    - 'YYYY-MM-DD'
+    """
+    raw = (date_str or "").strip().lower()
+
+    if raw in ("today", ""):
+        date = datetime.now().strftime("%Y-%m-%d")
+    else:
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", raw):
+            return "Error: Date must be 'today' or in YYYY-MM-DD format."
+        date = raw
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    return "Sunny, 72°F" if date == today else "Rainy, 55°F"
+
+
+
+# ---------------------------------------------------------------------
+# RETRY (rate-limit friendly)
+# ---------------------------------------------------------------------
+def invoke_with_retry(executor, payload):
+    delay = RETRY_DELAY_SECONDS
+    for attempt in range(1, MAX_RETRIES + 1):
         try:
             return executor.invoke(payload)
         except Exception as e:
             msg = str(e).lower()
-            is_rate_limit = (
-                "too many requests" in msg
-                or "429" in msg
-                or "rate limit" in msg
-            )
-            if is_rate_limit and attempt < max_retries:
-                print(
-                    f"⏳ Rate limited (attempt {attempt}/{max_retries}). "
-                    f"Retrying in {delay_seconds}s...\n"
-                )
-                time.sleep(delay_seconds)
-                delay_seconds = min(delay_seconds * 2, 16)
+            is_rate_limit = ("too many requests" in msg) or ("429" in msg) or ("rate limit" in msg)
+
+            if is_rate_limit and attempt < MAX_RETRIES:
+                logger.warning(f"⏳ Rate limited (attempt {attempt}/{MAX_RETRIES}). Retrying in {delay}s...")
+                time.sleep(delay)
+                delay = min(int(delay * 2), 60)
                 continue
-            if is_rate_limit:
-                raise RuntimeError(
-                    "Rate limited by GitHub Models (HTTP 429). "
-                    "Stop running the script and try again later."
-                ) from e
+
             raise
 
 # ---------------------------------------------------------------------
-# TOOL DEFINITIONS
+# AGENT BUILDER (LangGraph-style create_agent)
 # ---------------------------------------------------------------------
-def calculator(expression: str) -> str:
+def build_agent_executor(llm, tools):
     """
-    Safely evaluates a mathematical expression provided as a string.
-    Supports +, -, *, /, **, %, //, and parentheses.
-    Uses ast to parse and evaluate the expression securely.
-    Returns the result as a string or an error message.
+    Your create_agent() returns a LangGraph CompiledStateGraph, which expects input state
+    with a 'messages' list. It supports 'system_prompt' (NOT 'prompt').
     """
-    logger.info(f"Calculator tool called with: {expression}")
-
-    # Validate input: only allow digits, operators, parentheses, spaces, decimal points
-    if not re.match(r"^[\d\s\+\-\*\/\%\(\)\.]+$", expression):
-        logger.error("Calculator input contains invalid characters.")
-        return "Error: Invalid characters in expression."
-
-    allowed_operators = {
-        ast.Add: operator.add,
-        ast.Sub: operator.sub,
-        ast.Mult: operator.mul,
-        ast.Div: operator.truediv,
-        ast.Pow: operator.pow,
-        ast.Mod: operator.mod,
-        ast.FloorDiv: operator.floordiv,
-        ast.USub: operator.neg,
-        ast.UAdd: operator.pos,
-    }
-
-    def eval_node(node):
-        if isinstance(node, ast.Constant):
-            if isinstance(node.value, (int, float)):
-                return node.value
-            raise ValueError("Only int/float constants are allowed")
-        if isinstance(node, ast.BinOp):
-            op_type = type(node.op)
-            if op_type in allowed_operators:
-                return allowed_operators[op_type](
-                    eval_node(node.left), eval_node(node.right)
-                )
-            raise ValueError(f"Operator {op_type} not allowed")
-        if isinstance(node, ast.UnaryOp):
-            op_type = type(node.op)
-            if op_type in allowed_operators:
-                return allowed_operators[op_type](eval_node(node.operand))
-            raise ValueError(f"Unary operator {op_type} not allowed")
-        if isinstance(node, ast.Expression):
-            return eval_node(node.body)
-        raise ValueError(f"Unsupported expression: {type(node)}")
-
-    try:
-        parsed = ast.parse(expression, mode="eval")
-        result = eval_node(parsed.body)
-        logger.info(f"Calculator result: {result}")
-        return str(result)
-    except Exception as e:
-        logger.error(f"Calculator error: {e}")
-        return f"Error evaluating expression: {e}"
-
-def get_current_time(_: str) -> str:
-    """
-    Returns the current date and time in YYYY-MM-DD HH:MM:SS format.
-    """
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    logger.info(f"get_current_time tool called. Returning: {now}")
-    return now
-
-def get_current_date(_: str) -> str:
-    """
-    Returns today's date in YYYY-MM-DD format.
-    """
-    today = datetime.now().strftime("%Y-%m-%d")
-    logger.info(f"get_current_date tool called. Returning: {today}")
-    return today
-
-def reverse_string(s: str) -> str:
-    """
-    Reverses a string using Python slice notation.
-    """
-    logger.info(f"reverse_string tool called with: {s}")
-    reversed_str = s[::-1]
-    logger.info(f"reverse_string result: {reversed_str}")
-    return reversed_str
-
-def get_weather(date_str: str) -> str:
-    """
-    Returns mock weather data for a given date string in YYYY-MM-DD format.
-    Returns "Sunny, 72°F" if the date matches today's date, else "Rainy, 55°F".
-    """
-    logger.info(f"get_weather tool called with: {date_str}")
-    try:
-        datetime.strptime(date_str, "%Y-%m-%d")
-        today = datetime.now().strftime("%Y-%m-%d")
-        result = "Sunny, 72°F" if date_str == today else "Rainy, 55°F"
-        logger.info(f"get_weather result: {result}")
-        return result
-    except ValueError:
-        logger.error("get_weather error: invalid date format")
-        return "Error retrieving weather: invalid date format (expected YYYY-MM-DD)."
-    except Exception as e:
-        logger.error(f"get_weather error: {e}")
-        return f"Error retrieving weather: {e}"
-
-def sanitize_query(query: str) -> str:
-    """
-    Sanitizes and validates user queries.
-    Strips whitespace, checks for non-empty string.
-    Returns the sanitized query or raises ValueError if invalid.
-    """
-    if not isinstance(query, str):
-        logger.error("Query is not a string.")
-        raise ValueError("Query must be a string.")
-    sanitized = query.strip()
-    if not sanitized:
-        logger.error("Query is empty after stripping whitespace.")
-        raise ValueError("Query cannot be empty.")
-    return sanitized
-
-def run_local_tool_tests():
-    """
-    Runs local tests for all tools without any API/model calls.
-    """
-    print("\nRunning LOCAL tool tests (no API):\n")
-    print("─" * 50)
-    print("🧮 Calculator:", calculator("25 * 4 + 10"))  # expect 110
-    print("🕒 Time:", get_current_time(""))  # current timestamp
-    print("📅 Date:", get_current_date(""))  # current date
-    print("🔁 Reverse:", reverse_string("Hello World"))  # "dlroW olleH"
-    today = datetime.now().strftime("%Y-%m-%d")
-    print("🌤️ Weather today:", get_weather(today))  # "Sunny, 72°F"
-    print("🌧️ Weather 2023-04-05:", get_weather("2023-04-05"))  # "Rainy, 55°F"
-    print("🎉 Local tool tests complete!\n")
-
-# ---------------------------------------------------------------------
-# AGENT BUILDER
-# ---------------------------------------------------------------------
-def build_agent_executor(llm, tools, memory=None):
-    """
-    Builds an agent executor using create_agent(), adapting to the installed
-    LangChain version's create_agent() signature.
-    """
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            (
-                "system",
-                "You are a professional, succinct AI assistant. "
-                "Use tools whenever they are needed for accuracy. "
-                "If asked about weather 'today', first call get_current_date, "
-                "then call get_weather with the date formatted as YYYY-MM-DD.",
-            ),
-            ("user", "{input}"),
-            ("placeholder", "{agent_scratchpad}"),
-        ]
+    system_prompt = (
+        "You are a professional and succinct AI assistant. Respond clearly and concisely. "
+        "Use tools whenever helpful. "
+        "For weather: call get_weather directly. If the user says 'today', pass 'today' to get_weather."
     )
 
-    sig = inspect.signature(create_agent)
-    params = list(sig.parameters.keys())
 
-    kwargs = {}
-    if "llm" in params:
-        kwargs["llm"] = llm
-    elif "model" in params:
-        kwargs["model"] = llm
-    if "tools" in params:
-        kwargs["tools"] = tools
-    elif "toolkit" in params:
-        kwargs["toolkit"] = tools
-    if "prompt" in params:
-        kwargs["prompt"] = prompt
-    if memory is not None and "memory" in params:
-        kwargs["memory"] = memory
-    if "debug" in params:
-        kwargs["debug"] = DEBUG
-    elif "verbose" in params:
-        kwargs["verbose"] = DEBUG
+    return create_agent(
+        llm,                        # 'model' param in signature (BaseChatModel)
+        tools,                      # tools list
+        system_prompt=system_prompt,
+        debug=DEBUG,
+    )
 
-    if kwargs:
-        try:
-            return create_agent(**kwargs)
-        except TypeError:
-            pass
 
-    candidates = [
-        (llm, tools, prompt),
-        (tools, llm, prompt),
-        (llm, tools),
-        (tools, llm),
-        (llm,),
-        (tools,),
-    ]
-    for args in candidates:
-        if "debug" in params:
-            try:
-                return create_agent(*args, debug=DEBUG)
-            except TypeError:
-                pass
-        if "verbose" in params:
-            try:
-                return create_agent(*args, verbose=DEBUG)
-            except TypeError:
-                pass
-        try:
-            return create_agent(*args)
-        except TypeError:
-            pass
-    raise TypeError(f"Could not construct agent with create_agent(). Signature is: {sig}")
+def extract_output(result):
+    """
+    LangGraph agents commonly return a dict with 'messages' as the transcript.
+    We'll grab the last AI message content if present.
+    """
+    if isinstance(result, dict) and "messages" in result and result["messages"]:
+        last = result["messages"][-1]
+        # BaseMessage objects have .content
+        content = getattr(last, "content", None)
+        return content if content is not None else str(last)
+
+    # Fallbacks for other result shapes
+    if isinstance(result, dict):
+        return result.get("output") or result.get("result") or result.get("content") or str(result)
+
+    return str(result)
+
 
 # ---------------------------------------------------------------------
 # MAIN
 # ---------------------------------------------------------------------
-def main():
-    """
-    Main entry point for the AI agent lab.
-    Loads configuration, runs local tool tests, and (optionally) agent queries.
-    """
+def main() -> None:
     logger.info("🤖 Python LangChain Agent Starting...")
-
-    if RUN_LOCAL_TOOL_TESTS:
-        run_local_tool_tests()
-
-    if not RUN_AGENT_TESTS:
-        logger.info("🛑 RUN_AGENT_TESTS is False — skipping model/agent calls.")
-        return
-
-    if DRY_RUN:
-        logger.warning("🚫 DRY_RUN is enabled — skipping model/agent calls.")
-        return
 
     load_dotenv()
     token = os.getenv("GITHUB_TOKEN")
     if not token:
         logger.error("❌ GITHUB_TOKEN not found.")
-        print("   Create a .env file in your project root with:")
-        print("   GITHUB_TOKEN=your_token_here")
         return
 
     logger.info("✅ GITHUB_TOKEN loaded successfully!")
@@ -337,36 +167,31 @@ def main():
         Tool(
             name="Calculator",
             func=calculator,
-            description="Evaluates a math expression string (e.g., '25 * 4 + 10').",
+            description="Evaluate math expressions provided as strings.",
+            return_direct=True,
         ),
         Tool(
             name="get_current_time",
             func=get_current_time,
-            description="Returns current date and time as 'YYYY-MM-DD HH:MM:SS'.",
-        ),
-        Tool(
-            name="get_current_date",
-            func=get_current_date,
-            description="Returns today's date as 'YYYY-MM-DD'.",
+            description="Get the current date/time as YYYY-MM-DD HH:MM:SS.",
+            return_direct=True,
         ),
         Tool(
             name="reverse_string",
             func=reverse_string,
-            description="Reverses a string. Input should be a single string.",
+            description="Reverse a string.",
+            return_direct=True,
         ),
         Tool(
             name="get_weather",
             func=get_weather,
-            description="Returns mock weather for a date string formatted 'YYYY-MM-DD'."
+            description="Mock weather for a date in YYYY-MM-DD format.",
+            return_direct=True,
         ),
     ]
     logger.info("🛠️ Tools initialized successfully!")
 
-    memory = None
-    if ConversationBufferMemory is not None:
-        memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
-
-    agent_executor = build_agent_executor(llm, tools, memory=memory)
+    agent_executor = build_agent_executor(llm, tools)
 
     test_queries = [
         "What time is it right now?",
@@ -380,49 +205,31 @@ def main():
 
     for query in test_queries:
         print("─" * 50)
+        print(f"📝 Query: {query}\n")
+        logger.info(f"AI interaction started for query: {query}")
+
+        start = time.time()
         try:
-            sanitized_query = sanitize_query(query)
-        except ValueError as ve:
-            print(f"❌ Invalid query: {ve}\n")
-            logger.error(f"Invalid query: {ve}")
-            continue
+            # ✅ This is the critical change: LangGraph agent expects 'messages'
+            payload = {"messages": [HumanMessage(content=query)]}
 
-        print(f"📝 Query: {sanitized_query}\n")
-        logger.info(f"AI interaction started for query: {sanitized_query}")
+            result = invoke_with_retry(agent_executor, payload)
+            output = extract_output(result)
 
-        start_time = time.time()
-        try:
-            result = invoke_with_retry(agent_executor, {"input": sanitized_query})
-
-            output = None
-            if isinstance(result, dict):
-                output = (
-                    result.get("output")
-                    or result.get("result")
-                    or result.get("content")
-                )
-                if not output and "messages" in result and result["messages"]:
-                    last_msg = result["messages"][-1]
-                    output = getattr(last_msg, "content", None) or last_msg
-            else:
-                output = result
-
-            elapsed = time.time() - start_time
+            elapsed = time.time() - start
             print(f"✅ Result: {output}\n")
             logger.info(f"AI interaction result: {output}")
             logger.info(f"Query response time: {elapsed:.2f} seconds")
-            if elapsed > SLOW_QUERY_THRESHOLD:
-                logger.warning(
-                    f"Slow query detected: {elapsed:.2f} seconds for query '{sanitized_query}'"
-                )
+
         except Exception as e:
-            elapsed = time.time() - start_time
+            elapsed = time.time() - start
             print(f"❌ Error: {e}\n")
             logger.error(f"AI interaction error: {e}")
             logger.info(f"Query response time (with error): {elapsed:.2f} seconds")
 
     print("🎉 Agent demo complete!\n")
     logger.info("🎉 Agent demo complete!")
+
 
 if __name__ == "__main__":
     main()

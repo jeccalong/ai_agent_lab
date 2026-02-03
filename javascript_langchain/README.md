@@ -24,10 +24,15 @@ This is the **current working version** of the JavaScript LangChain agent demo.
 
 It demonstrates:
 - Creating a chat model client using GitHub Models
-- Defining a single local tool (calculator) in JavaScript using zod for schema validation
-- Allowing the agent to decide when to call the tool
+- Defining multiple local tools in JavaScript:
+  - **Calculator**: Evaluates math expressions
+  - **get_current_time**: Returns the current date in yyyy-MM-dd format
+  - **reverse_string**: Reverses a string
+  - **get_weather**: Returns mock weather for a given date (multi-function chaining demo)
+- Allowing the agent to decide when to call each tool
 - Handling tool outputs in an async/await flow
 - Returning a final response to the user
+- Chaining multiple tool calls automatically (e.g., answering "What's the weather like today?")
 
 ---
 
@@ -66,9 +71,26 @@ node app.js
 ### Calculator
 Evaluates basic math expressions.
 
-- Implemented locally in JavaScript as a DynamicStructuredTool
-- Uses zod for input schema validation
-- Intended for demonstration purposes only
+### get_current_time
+Returns the current date in yyyy-MM-dd format.
+
+### reverse_string
+Reverses a string.
+
+### get_weather
+Returns mock weather for a given date (yyyy-MM-dd).
+- If the date is today, returns "Sunny, 72°F"
+- Otherwise, returns "Rainy, 55°F"
+- Demonstrates multi-function chaining: the agent can call get_current_time, then get_weather, to answer questions like "What's the weather like today?"
+
+---
+
+## Example queries
+
+- What time is it right now?
+- What is 25 * 4 + 10?
+- Reverse the string 'Hello World'
+- What's the weather like today? (triggers multi-function chaining)
 
 ---
 

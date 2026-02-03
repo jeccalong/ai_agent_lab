@@ -1,106 +1,119 @@
-import readline from "readline";
-import { z } from "zod";
-import { initializeAgentExecutorWithOptions } from "@langchain/classic/agents";
-import { DynamicStructuredTool } from "@langchain/core/tools";
-import { DynamicTool } from "@langchain/core/tools";
 import "dotenv/config";
 import { ChatOpenAI } from "@langchain/openai";
+import { createToolCallingAgent, AgentExecutor } from "@langchain/classic/agents";
+import { Calculator } from "@langchain/community/tools/calculator";
+import { DynamicTool } from "@langchain/core/tools";
+import { ChatPromptTemplate, MessagesPlaceholder } from "@langchain/core/prompts";
 
+/**
+ * Main function to initialize and run the AI Agent
+ */
 async function main() {
-    // === API Safety Flags ===
-    const DRY_RUN = true; // Set to true to skip API calls
-    const COOLDOWN_MS = 10000; // 10 seconds cooldown after each call
+  console.log("🤖 Starting JavaScript LangChain AI Agent...");
 
-    // Helper for user confirmation
-    function askUser(question) {
-      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-      return new Promise((resolve) => rl.question(question, (ans) => { rl.close(); resolve(ans); }));
-    }
-  console.log("🤖 JavaScript LangChain Agent Starting...");
-
-  // Load GitHub Models token
+  // 1. Load and verify GitHub Token
   const token = process.env.GITHUB_TOKEN;
-
   if (!token) {
-    throw new Error("GITHUB_TOKEN is not set in environment variables.");
+    console.error("❌ ERROR: GITHUB_TOKEN is not set in your .env file.");
+    console.log("Please add GITHUB_TOKEN=your_token_here to the .env file in the project root.");
+    process.exit(1);
   }
+  console.log("✅ GITHUB_TOKEN loaded successfully.");
 
-  console.log("✅ GITHUB_TOKEN loaded successfully!");
-
-  // Create ChatOpenAI instance targeting GitHub Models
-  const model = new ChatOpenAI({
+  // 2. Initialize the Model (GitHub Models API)
+  const llm = new ChatOpenAI({
     model: "openai/gpt-4o",
     temperature: 0,
     apiKey: token,
-
-    // CRITICAL: GitHub Models endpoint
     configuration: {
       baseURL: "https://models.github.ai/inference",
-      defaultHeaders: {
-        Authorization: `Bearer ${token}`,
-      },
     },
   });
 
-  // Create tools array with DynamicStructuredTool for calculator using zod schema
+  // 3. Define the Tools
   const tools = [
-    new DynamicStructuredTool({
-      name: "calculator",
-      description: "Evaluate a basic arithmetic expression and return the numeric result.",
-      schema: z.object({
-        input: z.string().describe("A math expression like '25 * 4 + 10'")
-      }),
-      func: async ({ input }) => {
-        if (!/^[0-9+\-*/().\s]+$/.test(input)) {
-          throw new Error("Invalid characters in expression.");
+    new Calculator(),
+    new DynamicTool({
+      name: "get_current_time",
+      description: "Returns the current date in yyyy-MM-dd format.",
+      func: async () => {
+        const now = new Date();
+        // Pad month and day to two digits
+        const yyyy = now.getFullYear();
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const dd = String(now.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+      },
+    }),
+    new DynamicTool({
+      name: "get_weather",
+      description: "Returns mock weather for a given date (yyyy-MM-dd). If the date is today, returns 'Sunny, 72°F'. Otherwise, returns 'Rainy, 55°F'. Input should be a string date in yyyy-MM-dd format.",
+      func: async (date) => {
+        const now = new Date();
+        const yyyy = now.getFullYear();
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const dd = String(now.getDate()).padStart(2, '0');
+        const today = `${yyyy}-${mm}-${dd}`;
+        if (date === today) {
+          return "Sunny, 72°F";
+        } else {
+          return "Rainy, 55°F";
         }
-        // eslint-disable-next-line no-new-func
-        const result = Function(`"use strict"; return (${input});`)();
-        return String(result);
-      }
-    })
+      },
+    }),
+    new DynamicTool({
+      name: "reverse_string",
+      description: "Reverses a string. Input should be a single string.",
+      func: async (input) => input.split("").reverse().join(""),
+    }),
   ];
 
-  // Create agent executor
-  const executor = await initializeAgentExecutorWithOptions(
-    tools,
-    model,
-    {
-      agentType: "openai-functions",
-      verbose: true,
+  // 4. Create the Prompt Template
+  // Note: 'agent_scratchpad' is required for the agent to track its thoughts and tool outputs
+  const prompt = ChatPromptTemplate.fromMessages([
+    ["system", "You are a professional and succinct AI assistant."],
+    ["human", "{input}"],
+    new MessagesPlaceholder("agent_scratchpad"),
+  ]);
+
+  // 5. Initialize the Agent and Executor
+  // We use createToolCallingAgent and AgentExecutor from @langchain/classic/agents
+  // to ensure compatibility with the GitHub Models API formatting requirements.
+  const agent = await createToolCallingAgent({ llm, tools, prompt });
+  const executor = new AgentExecutor({ 
+    agent, 
+    tools, 
+    verbose: true 
+  });
+
+  // 6. Run Example Queries
+  const queries = [
+    "What's the weather like today?",
+    "What time is it right now?",
+    "What is 25 * 4 + 10?",
+    "Reverse the string 'Hello World'"
+  ];
+
+  console.log("\n🚀 Running example queries:");
+  
+  for (const query of queries) {
+    console.log("─".repeat(50));
+    console.log(`📝 Query: ${query}`);
+    
+    try {
+      const result = await executor.invoke({ input: query });
+      console.log(`✅ Result: ${result.output}`);
+    } catch (err) {
+      console.error(`❌ Error during query: ${err.message}`);
     }
-  );
-
-  const query = "What is 25 * 4 + 10?";
-  console.log("📝 Query:", query);
-
-  if (DRY_RUN) {
-    console.log("[DRY_RUN] Skipping API call. No request sent.");
-    return;
   }
 
-  const ans = await askUser("Proceed with API call? (y/N): ");
-  if (ans.trim().toLowerCase() !== "y") {
-    console.log("Aborted by user. No API call made.");
-    return;
-  }
-
-  try {
-    const result = await executor.invoke({ input: query });
-    console.log("✅ Result:", result.output);
-    if (COOLDOWN_MS > 0) {
-      console.log(`Cooldown: Waiting ${COOLDOWN_MS / 1000} seconds before next call...`);
-      await new Promise((res) => setTimeout(res, COOLDOWN_MS));
-    }
-  } catch (err) {
-    if (err && err.status === 429) {
-      console.error("❌ Rate limit hit. Stopping further requests.");
-      process.exit(1);
-    }
-    console.error("❌ Error invoking agent executor:", err);
-  }
+  console.log("─".repeat(50));
+  console.log("\n✅ All tasks completed!");
 }
 
+// Start the application
 main().catch((err) => {
-  console.error("❌ Error invoking model:", err);
+  console.error("❌ Fatal Error:", err);
 });
+

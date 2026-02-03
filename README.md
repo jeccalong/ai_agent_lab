@@ -110,9 +110,14 @@ The JavaScript implementation mirrors the Python agent conceptually while adapti
 - async/await orchestration
 - JavaScript‑specific LangChain APIs
 
+**Current capabilities:**
+- Implements four tools: calculator, get_current_time, reverse_string, and get_weather
+- Demonstrates multi-function chaining (e.g., answering "What's the weather like today?" by chaining get_current_time and get_weather)
+- Shows how agents can reason about tool usage and chain calls automatically
+
 It exists primarily to highlight **language‑level differences** rather than introduce new agent behavior.
 
-➡️ See `javascript_langchain/README.md` for details.
+➡️ See `javascript_langchain/README.md` for details and example queries.
 
 ---
 
@@ -164,3 +169,9 @@ It is **not production software** and intentionally favors clarity over abstract
 ## License
 
 Educational use only.
+
+---
+
+## AI/Machine Learning Policy Compliance
+
+This project was developed in full compliance with Code:You's AI/Machine Learning Policy. AI tools (GitHub Copilot and GPT-4) were used as an aid to support code writing, debugging, and documentation, but not as a substitute for human expertise or review. All code generated with AI assistance was carefully reviewed, tested, and edited to meet project requirements and coding standards. No AI-generated code was submitted in place of original student work, and all usage respects copyright, privacy, and intellectual property norms. AI involvement is transparently documented here and in code comments, as required by Code:You policy.
